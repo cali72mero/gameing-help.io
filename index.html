@@ -1,0 +1,691 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>eSports Performance Lab v4</title>
+    <!-- Three.js für 3D Grafik laden -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+    <style>
+        :root {
+            --bg: #0f1016;
+            --panel: #1a1c29;
+            --primary: #00ffcc; /* Cyan */
+            --secondary: #ff3366; /* Red/Pink */
+            --accent: #7d4fff; /* Purple */
+            --text: #f0f0f0;
+            --warning: #ffaa00;
+        }
+
+        body {
+            font-family: 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
+            background-color: var(--bg);
+            color: var(--text);
+            margin: 0;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            min-height: 100vh;
+            overflow: hidden;
+            user-select: none;
+        }
+
+        /* --- Header --- */
+        header {
+            width: 100%;
+            background: linear-gradient(90deg, #121212 0%, var(--panel) 50%, #121212 100%);
+            padding: 10px 0;
+            text-align: center;
+            border-bottom: 2px solid var(--accent);
+            z-index: 10;
+        }
+
+        h1 { margin: 0; text-transform: uppercase; font-style: italic; font-size: 1.5rem; }
+        h1 span { color: var(--primary); }
+
+        /* --- Navigation --- */
+        .nav-bar {
+            display: flex;
+            gap: 8px;
+            margin: 15px 0;
+            z-index: 10;
+            flex-wrap: wrap;
+            justify-content: center;
+        }
+
+        .mode-btn {
+            background: rgba(255,255,255,0.05);
+            border: 1px solid #444;
+            color: #888;
+            padding: 8px 16px;
+            cursor: pointer;
+            font-weight: bold;
+            font-size: 0.9rem;
+            text-transform: uppercase;
+            border-radius: 4px;
+            transition: 0.2s;
+        }
+        .mode-btn:hover, .mode-btn.active {
+            background: var(--primary);
+            color: #000;
+            border-color: var(--primary);
+            box-shadow: 0 0 10px var(--primary);
+        }
+
+        /* --- Main Arena Container --- */
+        #arena-container {
+            position: relative;
+            width: 90vw;
+            max-width: 900px;
+            height: 550px;
+            background-color: #000;
+            border: 2px solid #333;
+            border-radius: 8px;
+            box-shadow: 0 10px 40px rgba(0,0,0,0.6);
+            overflow: hidden;
+        }
+
+        /* --- Screens (UI Overlays) --- */
+        .screen {
+            position: absolute;
+            top: 0; left: 0;
+            width: 100%; height: 100%;
+            background: rgba(15, 16, 22, 0.98);
+            display: none;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            z-index: 20;
+        }
+        .screen.active { display: flex; }
+
+        /* --- Settings Inputs --- */
+        .settings-panel {
+            background: var(--panel);
+            padding: 20px;
+            border-radius: 8px;
+            text-align: left;
+            min-width: 300px;
+            border: 1px solid #444;
+        }
+        .settings-row { margin-bottom: 15px; }
+        label { display: block; margin-bottom: 5px; color: #ccc; font-size: 0.9rem; }
+        select, input[type="number"], input[type="range"] {
+            width: 100%; padding: 8px; background: #000; color: white; border: 1px solid #444; border-radius: 4px;
+        }
+        .warning-text { color: var(--warning); font-size: 0.85rem; margin-top: 5px; display: none; }
+        .custom-slider-container { display: none; margin-top: 5px; }
+
+        /* --- Inputs & Buttons --- */
+        .start-btn {
+            padding: 12px 40px;
+            font-size: 1.2rem;
+            background: var(--accent);
+            color: white;
+            border: none;
+            border-radius: 5px;
+            cursor: pointer;
+            font-weight: bold;
+            text-transform: uppercase;
+            transition: 0.2s;
+            margin-top: 20px;
+        }
+        .start-btn:hover { transform: scale(1.05); background: #6a3ee5; }
+
+        /* --- HUD --- */
+        #hud {
+            position: absolute;
+            top: 10px;
+            width: 100%;
+            display: flex;
+            justify-content: center;
+            gap: 30px;
+            font-size: 1.5rem;
+            font-weight: bold;
+            color: white;
+            text-shadow: 0 0 5px black;
+            z-index: 5;
+            pointer-events: none;
+            display: none;
+        }
+        .hud-val { color: var(--primary); font-family: monospace; }
+
+        /* --- GAME ELEMENTS --- */
+        #game-layer-2d { position: absolute; width: 100%; height: 100%; display: none; }
+        .target-2d {
+            position: absolute; width: 50px; height: 50px;
+            background: var(--primary); border-radius: 50%;
+            box-shadow: 0 0 15px var(--primary); cursor: pointer;
+        }
+        #game-canvas-3d { width: 100%; height: 100%; display: none; }
+        #crosshair {
+            position: absolute; top: 50%; left: 50%; width: 20px; height: 20px;
+            border: 2px solid white; border-radius: 50%; transform: translate(-50%, -50%);
+            pointer-events: none; z-index: 6; display: none;
+        }
+
+        /* --- TRACKING ELEMENTS --- */
+        #tracking-ball {
+            position: absolute; width: 60px; height: 60px;
+            background: var(--secondary); border-radius: 50%;
+            box-shadow: 0 0 20px var(--secondary);
+            display: none; cursor: crosshair;
+        }
+        #tracking-ball:hover { background: #fff; box-shadow: 0 0 30px #fff; }
+
+        /* --- CPS ELEMENTS --- */
+        #cps-area {
+            width: 300px; height: 120px;
+            background: #222; border: 2px solid #555;
+            border-radius: 10px; display: flex; align-items: center; justify-content: center;
+            font-size: 1.5rem; color: #aaa; cursor: pointer;
+            transition: 0.1s; user-select: none; margin-top: 20px;
+        }
+        #cps-area:active { background: #333; transform: scale(0.98); border-color: var(--primary); color: white; }
+
+        /* --- MEMORY ELEMENTS --- */
+        #memory-grid {
+            display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px;
+            margin-bottom: 20px;
+        }
+        .mem-tile {
+            width: 80px; height: 80px; background: #333;
+            border-radius: 5px; cursor: pointer; transition: 0.2s;
+        }
+        .mem-tile.active { background: var(--primary); box-shadow: 0 0 20px var(--primary); transform: scale(1.05); }
+
+        /* --- REFLEX --- */
+        #reflex-surface {
+            width: 100%; height: 100%; display: flex; align-items: center; justify-content: center;
+            font-size: 2rem; font-weight: bold; cursor: pointer;
+        }
+        .reflex-wait { background: #ab1818; }
+        .reflex-go { background: #00db6e; color: black; }
+        .reflex-idle { background: var(--panel); }
+
+    </style>
+</head>
+<body>
+
+    <header>
+        <h1>Pro <span>Performance</span> Lab v4</h1>
+    </header>
+
+    <div class="nav-bar">
+        <button class="mode-btn active" onclick="switchMenu('aim')">🎯 Aim</button>
+        <button class="mode-btn" onclick="switchMenu('tracking')">🔵 Tracking</button>
+        <button class="mode-btn" onclick="switchMenu('cps')">🖱️ CPS Speed</button>
+        <button class="mode-btn" onclick="switchMenu('memory')">🧠 Memory</button>
+        <button class="mode-btn" onclick="switchMenu('reflex')">⚡ Reflex</button>
+    </div>
+
+    <div id="arena-container">
+        
+        <!-- GLOBAL HUD -->
+        <div id="hud">
+            <div>Score: <span id="hud-score" class="hud-val">0</span></div>
+            <div>Zeit: <span id="hud-time" class="hud-val">0</span></div>
+        </div>
+
+        <!-- GAME ELEMENTS -->
+        <div id="crosshair"></div>
+        <canvas id="game-canvas-3d"></canvas>
+        <div id="game-layer-2d"></div>
+        <div id="tracking-ball" onmouseover="trackingState.onTarget=true" onmouseout="trackingState.onTarget=false"></div>
+
+        <!-- --- MENUS --- -->
+
+        <!-- 1. AIM MENU -->
+        <div id="menu-aim" class="screen active">
+            <h2>Aim Training</h2>
+            <div class="settings-panel">
+                <div class="settings-row">
+                    <label>Modus:</label>
+                    <select id="aimModeSelect">
+                        <option value="2d">2D Gridshot (Aufwärmen)</option>
+                        <option value="3d">3D Shooter (Realistisch)</option>
+                    </select>
+                </div>
+                <div class="settings-row">
+                    <label>Zeit (Sekunden):</label>
+                    <input type="number" id="aimDuration" value="30">
+                </div>
+            </div>
+            <button class="start-btn" onclick="startAimSession()">Starten</button>
+            <p style="color:#666; font-size:0.8rem; margin-top:10px;">3D: WASD + Maus (ESC zum beenden)</p>
+        </div>
+
+        <!-- 2. TRACKING MENU -->
+        <div id="menu-tracking" class="screen">
+            <h2>Tracking Konfiguration</h2>
+            <div class="settings-panel">
+                <!-- Geschwindigkeit -->
+                <div class="settings-row">
+                    <label>Geschwindigkeit:</label>
+                    <select id="trackSpeedSelect" onchange="toggleCustom('trackSpeedSelect', 'customSpeedDiv')">
+                        <option value="2">Extrem Langsam (Schnecke)</option>
+                        <option value="4" selected>Mittel (Standard)</option>
+                        <option value="7">Schnell</option>
+                        <option value="12">Extrem Schnell</option>
+                        <option value="20">Unmöglich</option>
+                        <option value="custom">Benutzerdefiniert</option>
+                    </select>
+                    <div id="customSpeedDiv" class="custom-slider-container">
+                        <label>Eigener Wert (1-30):</label>
+                        <input type="range" id="trackCustomSpeed" min="1" max="30" value="10">
+                    </div>
+                </div>
+
+                <!-- Größe -->
+                <div class="settings-row">
+                    <label>Größe:</label>
+                    <select id="trackSizeSelect" onchange="checkSizeWarning()">
+                        <option value="20">Super Klein (Hardcore)</option>
+                        <option value="40">Klein</option>
+                        <option value="60" selected>Mittel</option>
+                        <option value="90">Groß</option>
+                        <option value="150">Extra Groß</option>
+                        <option value="custom">Benutzerdefiniert</option>
+                    </select>
+                    <div id="warningSize" class="warning-text">⚠️ Hinweis: Bei "Extra Groß" ist der Lerneffekt gering, da es zu einfach ist.</div>
+                    
+                    <div id="customSizeDiv" class="custom-slider-container">
+                        <label>Eigene Größe (10px - 200px):</label>
+                        <input type="range" id="trackCustomSize" min="10" max="200" value="60">
+                    </div>
+                </div>
+            </div>
+            <button class="start-btn" onclick="startTracking()">Starten</button>
+        </div>
+
+        <!-- 3. CPS MENU -->
+        <div id="menu-cps" class="screen">
+            <h2>CPS Speed Test</h2>
+            
+            <div class="settings-panel" style="min-width: 250px; padding: 10px;">
+                <label>Dauer:</label>
+                <select id="cpsDurationSelect" onchange="toggleCustom('cpsDurationSelect', 'customCpsDiv')">
+                    <option value="1">Kurz (1 Sekunde)</option>
+                    <option value="5">Mittel (5 Sekunden)</option>
+                    <option value="10" selected>Lang (10 Sekunden)</option>
+                    <option value="30">Extra Lang (30 Sekunden)</option>
+                    <option value="custom">Benutzerdefiniert</option>
+                </select>
+                <div id="customCpsDiv" class="custom-slider-container">
+                    <label>Eigene Zeit (Sekunden):</label>
+                    <input type="number" id="cpsCustomInput" value="10" min="1" max="600">
+                </div>
+            </div>
+
+            <div id="cps-area" onmousedown="handleCPSClick()">Klicken zum Starten</div>
+            <div id="cps-result" style="margin-top:20px; font-size:1.5rem; font-weight:bold; color:var(--primary);"></div>
+        </div>
+
+        <!-- 4. MEMORY MENU -->
+        <div id="menu-memory" class="screen">
+            <h2>Visual Memory</h2>
+            <p id="mem-status" style="color:#888;">Merke dir die Reihenfolge!</p>
+            <div id="memory-grid">
+                <div class="mem-tile" id="tile-0" onclick="handleMemClick(0)"></div>
+                <div class="mem-tile" id="tile-1" onclick="handleMemClick(1)"></div>
+                <div class="mem-tile" id="tile-2" onclick="handleMemClick(2)"></div>
+                <div class="mem-tile" id="tile-3" onclick="handleMemClick(3)"></div>
+                <div class="mem-tile" id="tile-4" onclick="handleMemClick(4)"></div>
+                <div class="mem-tile" id="tile-5" onclick="handleMemClick(5)"></div>
+                <div class="mem-tile" id="tile-6" onclick="handleMemClick(6)"></div>
+                <div class="mem-tile" id="tile-7" onclick="handleMemClick(7)"></div>
+                <div class="mem-tile" id="tile-8" onclick="handleMemClick(8)"></div>
+            </div>
+            <button class="start-btn" onclick="startMemory()" id="mem-start-btn">Level 1 Starten</button>
+        </div>
+
+        <!-- 5. REFLEX MENU -->
+        <div id="menu-reflex" class="screen">
+            <div id="reflex-surface" class="reflex-idle" onmousedown="handleReflexClick()">Klicke zum Starten</div>
+        </div>
+
+        <!-- RESULT SCREEN -->
+        <div id="screen-result" class="screen">
+            <h2>Ergebnis</h2>
+            <div style="font-size: 2rem; margin-bottom: 20px; color:var(--primary);" id="result-main"></div>
+            <div style="color:#888;" id="result-sub"></div>
+            <button class="start-btn" onclick="location.reload()">Zurück zum Menü</button>
+        </div>
+
+    </div>
+
+    <script>
+        // --- UI HELPERS ---
+        function toggleCustom(selectId, divId) {
+            const val = document.getElementById(selectId).value;
+            const div = document.getElementById(divId);
+            div.style.display = (val === 'custom') ? 'block' : 'none';
+        }
+
+        function checkSizeWarning() {
+            const val = document.getElementById('trackSizeSelect').value;
+            const warn = document.getElementById('warningSize');
+            const customDiv = document.getElementById('customSizeDiv');
+            
+            // Warning Logic
+            if(val === '150') warn.style.display = 'block';
+            else warn.style.display = 'none';
+
+            // Custom Logic
+            customDiv.style.display = (val === 'custom') ? 'block' : 'none';
+        }
+
+        // --- NAVIGATION ---
+        function switchMenu(id) {
+            document.querySelectorAll('.screen').forEach(s => s.classList.remove('active'));
+            document.getElementById('menu-' + id).classList.add('active');
+            document.querySelectorAll('.mode-btn').forEach(b => b.classList.remove('active'));
+            event.target.classList.add('active');
+            if(document.pointerLockElement) document.exitPointerLock();
+        }
+
+        function showResult(main, sub) {
+            document.querySelectorAll('.screen').forEach(s => s.classList.remove('active'));
+            document.getElementById('screen-result').classList.add('active');
+            document.getElementById('result-main').innerHTML = main;
+            document.getElementById('result-sub').innerText = sub;
+        }
+
+        // ==========================================
+        // 1. AIM TRAINER (2D & 3D)
+        // ==========================================
+        let aimState = { active: false, score: 0, timeLeft: 0, timer: null, mode: '2d' };
+        
+        function startAimSession() {
+            aimState.mode = document.getElementById('aimModeSelect').value;
+            aimState.timeLeft = parseInt(document.getElementById('aimDuration').value);
+            aimState.score = 0;
+            aimState.active = true;
+            
+            document.getElementById('menu-aim').classList.remove('active');
+            document.getElementById('hud').style.display = 'flex';
+            updateAimHUD();
+
+            aimState.timer = setInterval(() => {
+                aimState.timeLeft--;
+                updateAimHUD();
+                if(aimState.timeLeft <= 0) endAimGame();
+            }, 1000);
+
+            if(aimState.mode === '2d') {
+                document.getElementById('game-layer-2d').style.display = 'block';
+                spawn2DTarget();
+            } else {
+                init3DGame();
+            }
+        }
+
+        function updateAimHUD() {
+            document.getElementById('hud-score').innerText = aimState.score;
+            document.getElementById('hud-time').innerText = aimState.timeLeft;
+        }
+
+        function spawn2DTarget() {
+            if(!aimState.active) return;
+            const layer = document.getElementById('game-layer-2d');
+            const target = document.createElement('div');
+            target.className = 'target-2d';
+            target.style.left = Math.random() * (layer.clientWidth - 50) + 'px';
+            target.style.top = Math.random() * (layer.clientHeight - 50) + 'px';
+            target.onmousedown = (e) => { e.stopPropagation(); target.remove(); aimState.score++; updateAimHUD(); spawn2DTarget(); };
+            layer.appendChild(target);
+        }
+
+        function endAimGame() {
+            aimState.active = false;
+            clearInterval(aimState.timer);
+            document.getElementById('hud').style.display = 'none';
+            document.getElementById('game-layer-2d').innerHTML = '';
+            document.getElementById('game-layer-2d').style.display = 'none';
+            document.getElementById('game-canvas-3d').style.display = 'none';
+            document.getElementById('crosshair').style.display = 'none';
+            if(document.pointerLockElement) document.exitPointerLock();
+            showResult(aimState.score + " Hits", "Modus: " + aimState.mode);
+        }
+
+        // 3D LOGIC
+        let scene, camera, renderer, raycaster, targets = [], moveState = {w:0,a:0,s:0,d:0};
+        function init3DGame() {
+            const canvas = document.getElementById('game-canvas-3d');
+            canvas.style.display = 'block';
+            document.getElementById('crosshair').style.display = 'block';
+            
+            scene = new THREE.Scene(); scene.background = new THREE.Color(0x0f1016);
+            scene.fog = new THREE.Fog(0x0f1016, 10, 50);
+            camera = new THREE.PerspectiveCamera(75, canvas.clientWidth/canvas.clientHeight, 0.1, 1000);
+            camera.position.set(0, 1.6, 5);
+            renderer = new THREE.WebGLRenderer({canvas:canvas, antialias:true});
+            renderer.setSize(canvas.clientWidth, canvas.clientHeight);
+            
+            const light = new THREE.DirectionalLight(0xffffff, 1); light.position.set(5,10,7); scene.add(light); scene.add(new THREE.AmbientLight(0xffffff, 0.5));
+            const grid = new THREE.GridHelper(60, 60, 0x7d4fff, 0x222222); scene.add(grid);
+            
+            raycaster = new THREE.Raycaster();
+            targets = []; for(let i=0; i<3; i++) spawn3DTarget();
+            
+            canvas.requestPointerLock = canvas.requestPointerLock || canvas.mozRequestPointerLock;
+            canvas.onclick = () => canvas.requestPointerLock();
+            document.addEventListener('keydown', e => handleKey(e.key, true));
+            document.addEventListener('keyup', e => handleKey(e.key, false));
+            document.addEventListener('mousemove', e => {
+                if(document.pointerLockElement===canvas) {
+                    camera.rotation.y -= e.movementX * 0.002;
+                    camera.rotation.x -= e.movementY * 0.002;
+                    camera.rotation.x = Math.max(-1.5, Math.min(1.5, camera.rotation.x));
+                }
+            });
+            document.addEventListener('mousedown', () => {
+                if(!aimState.active || document.pointerLockElement!==canvas) return;
+                raycaster.setFromCamera({x:0,y:0}, camera);
+                const intersects = raycaster.intersectObjects(targets);
+                if(intersects.length > 0) {
+                    scene.remove(intersects[0].object);
+                    targets = targets.filter(t => t!==intersects[0].object);
+                    aimState.score++; updateAimHUD(); spawn3DTarget();
+                }
+            });
+            animate3D();
+        }
+        function handleKey(k, p) { if("wasd".includes(k.toLowerCase())) moveState[k.toLowerCase()] = p; }
+        function spawn3DTarget() {
+            const sphere = new THREE.Mesh(new THREE.SphereGeometry(0.5,16,16), new THREE.MeshStandardMaterial({color:0x00ffcc}));
+            sphere.position.set((Math.random()-0.5)*20, Math.random()*4+0.5, (Math.random()*-15)-5);
+            scene.add(sphere); targets.push(sphere);
+        }
+        function animate3D() {
+            if(!aimState.active) return;
+            requestAnimationFrame(animate3D);
+            const dir = new THREE.Vector3(), fwd = new THREE.Vector3();
+            camera.getWorldDirection(fwd); fwd.y=0; fwd.normalize();
+            const right = new THREE.Vector3().crossVectors(fwd, new THREE.Vector3(0,1,0)).normalize();
+            if(moveState.w) dir.add(fwd); if(moveState.s) dir.sub(fwd);
+            if(moveState.d) dir.add(right); if(moveState.a) dir.sub(right);
+            camera.position.add(dir.normalize().multiplyScalar(0.15));
+            renderer.render(scene, camera);
+        }
+
+        // ==========================================
+        // 2. TRACKING (UPDATED)
+        // ==========================================
+        let trackingState = { active: false, onTarget: false, score: 0, timeLeft: 0, timer: null };
+        let ball = { x: 0, y: 0, dx: 3, dy: 3, el: null };
+
+        function startTracking() {
+            // GET SETTINGS
+            const speedSel = document.getElementById('trackSpeedSelect').value;
+            const sizeSel = document.getElementById('trackSizeSelect').value;
+            
+            let speed = (speedSel === 'custom') ? parseInt(document.getElementById('trackCustomSpeed').value) : parseInt(speedSel);
+            let size = (sizeSel === 'custom') ? parseInt(document.getElementById('trackCustomSize').value) : parseInt(sizeSel);
+
+            trackingState.active = true;
+            trackingState.score = 0;
+            trackingState.timeLeft = 30;
+            trackingState.onTarget = false;
+            
+            document.getElementById('menu-tracking').classList.remove('active');
+            document.getElementById('hud').style.display = 'flex';
+            ball.el = document.getElementById('tracking-ball');
+            
+            // APPLY SIZE
+            ball.el.style.width = size + 'px';
+            ball.el.style.height = size + 'px';
+            ball.el.style.display = 'block';
+            
+            // APPLY SPEED & RANDOM START
+            ball.x = 200; ball.y = 200;
+            ball.dx = (Math.random() > 0.5 ? speed : -speed);
+            ball.dy = (Math.random() > 0.5 ? speed : -speed);
+
+            trackingState.timer = setInterval(() => {
+                trackingState.timeLeft--;
+                if(trackingState.onTarget) trackingState.score += 10;
+                document.getElementById('hud-score').innerText = trackingState.score;
+                document.getElementById('hud-time').innerText = trackingState.timeLeft;
+                
+                if(trackingState.timeLeft <= 0) {
+                    trackingState.active = false;
+                    clearInterval(trackingState.timer);
+                    ball.el.style.display = 'none';
+                    document.getElementById('hud').style.display = 'none';
+                    showResult(trackingState.score + " Pkt", "Tracking Score");
+                }
+            }, 1000);
+
+            animateTracking();
+        }
+
+        function animateTracking() {
+            if(!trackingState.active) return;
+            requestAnimationFrame(animateTracking);
+            
+            const container = document.getElementById('arena-container');
+            // Dynamisch die Größe des Balls berücksichtigen
+            const ballSize = parseInt(ball.el.style.width);
+            const maxX = container.clientWidth - ballSize;
+            const maxY = container.clientHeight - ballSize;
+
+            ball.x += ball.dx;
+            ball.y += ball.dy;
+
+            if(ball.x <= 0 || ball.x >= maxX) ball.dx *= -1;
+            if(ball.y <= 0 || ball.y >= maxY) ball.dy *= -1;
+            
+            // Clamp values
+            ball.x = Math.max(0, Math.min(ball.x, maxX));
+            ball.y = Math.max(0, Math.min(ball.y, maxY));
+
+            ball.el.style.left = ball.x + 'px';
+            ball.el.style.top = ball.y + 'px';
+            
+            if(trackingState.onTarget) trackingState.score++;
+            document.getElementById('hud-score').innerText = trackingState.score;
+        }
+
+        // ==========================================
+        // 3. CPS TEST (UPDATED)
+        // ==========================================
+        let cpsState = { active: false, clicks: 0, start: 0, ended: false, duration: 10 };
+
+        function handleCPSClick() {
+            if(cpsState.ended) return;
+            const area = document.getElementById('cps-area');
+            const res = document.getElementById('cps-result');
+
+            if(!cpsState.active) {
+                // START & GET DURATION
+                const durSel = document.getElementById('cpsDurationSelect').value;
+                cpsState.duration = (durSel === 'custom') ? parseInt(document.getElementById('cpsCustomInput').value) : parseInt(durSel);
+
+                cpsState.active = true;
+                cpsState.clicks = 1;
+                cpsState.start = Date.now();
+                area.innerText = "KLICKEN!";
+                area.style.background = "#333";
+                
+                setTimeout(() => {
+                    cpsState.ended = true;
+                    cpsState.active = false;
+                    const timePassed = (Date.now() - cpsState.start) / 1000;
+                    const cps = (cpsState.clicks / timePassed).toFixed(1);
+                    area.innerText = "Fertig!";
+                    res.innerHTML = cps + " <small>CPS</small> (" + cpsState.clicks + " Klicks in " + cpsState.duration + "s)";
+                }, cpsState.duration * 1000); 
+            } else {
+                cpsState.clicks++;
+                area.innerText = cpsState.clicks;
+            }
+        }
+
+        // ==========================================
+        // 4. MEMORY & 5. REFLEX (UNCHANGED)
+        // ==========================================
+        let memState = { seq: [], userSeq: [], level: 1, processing: false };
+        function startMemory() {
+            memState.level = 1;
+            document.getElementById('mem-start-btn').style.display = 'none';
+            document.getElementById('mem-status').style.color = "#fff";
+            nextMemLevel();
+        }
+        function nextMemLevel() {
+            memState.seq = []; memState.userSeq = []; memState.processing = true;
+            document.getElementById('mem-status').innerText = "Level " + memState.level + ": Beobachten...";
+            for(let i=0; i<memState.level + 2; i++) memState.seq.push(Math.floor(Math.random() * 9));
+            let i = 0;
+            const interval = setInterval(() => {
+                if(i >= memState.seq.length) {
+                    clearInterval(interval); memState.processing = false;
+                    document.getElementById('mem-status').innerText = "Jetzt wiederholen!";
+                    document.getElementById('mem-status').style.color = "var(--primary)";
+                    return;
+                }
+                flashTile(memState.seq[i]); i++;
+            }, 800);
+        }
+        function flashTile(idx) {
+            const tile = document.getElementById('tile-'+idx); tile.classList.add('active');
+            setTimeout(() => tile.classList.remove('active'), 400);
+        }
+        function handleMemClick(idx) {
+            if(memState.processing) return;
+            flashTile(idx); memState.userSeq.push(idx);
+            const currentStep = memState.userSeq.length - 1;
+            if(memState.userSeq[currentStep] !== memState.seq[currentStep]) {
+                document.getElementById('mem-status').innerText = "Falsch! Game Over.";
+                document.getElementById('mem-status').style.color = "red";
+                document.getElementById('mem-start-btn').style.display = 'inline-block';
+                document.getElementById('mem-start-btn').innerText = "Neustart";
+                return;
+            }
+            if(memState.userSeq.length === memState.seq.length) {
+                memState.level++; memState.processing = true;
+                document.getElementById('mem-status').innerText = "Richtig! Nächstes Level...";
+                setTimeout(nextMemLevel, 1000);
+            }
+        }
+
+        let refState = 'idle', refStart=0;
+        function handleReflexClick() {
+            const el = document.getElementById('reflex-surface');
+            if(refState === 'idle') {
+                refState = 'wait'; el.className = 'reflex-wait'; el.innerText = 'Warte...';
+                setTimeout(() => {
+                    if(refState==='wait') {
+                        refState='go'; el.className='reflex-go'; el.innerText='KLICK!'; refStart=Date.now();
+                    }
+                }, 1500+Math.random()*2000);
+            } else if(refState === 'wait') {
+                el.innerText='Zu früh!'; refState='idle'; setTimeout(()=>el.className='reflex-idle',1000);
+            } else if(refState === 'go') {
+                showResult((Date.now()-refStart) + " ms", "Reaktionszeit");
+                el.className='reflex-idle'; refState='idle'; el.innerText='Starten';
+            }
+        }
+    </script>
+</body>
+</html>
